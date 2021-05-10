@@ -25,6 +25,11 @@
 
 <div id="output"></div>
 
+<p>
+  <label>Pasek postępu 1</label>
+  <progress id="webworker1" value="0" max="100">Web Worker 1</progress>
+</p>
+
 <script>
     
   const worker = new Worker("worker.js", { type: "module" });
