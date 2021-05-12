@@ -1,73 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
 <meta charset="utf-8">
-
-<p>
-  <label>
-    Type an image URL to decode
-    <input type="url" id="image-url" list="image-list">
-    <datalist id="image-list">
-      <option value="https://html.spec.whatwg.org/images/robots.jpeg">
-    </datalist>
-  </label>
-</p>
-
-<p>
-  <label>
-    Choose a filter to apply
-    <select id="filter">
-      <option value="none">none</option>
-      <option value="grayscale">grayscale</option>
-      <option value="brighten">brighten by 20%</option>
-    </select>
-  </label>
-</p>
-
-<div id="output"></div>
-
-<p>
-  <label>Pasek postępu 1</label>
-  <progress id="webworker1" value="0" max="100">Web Worker 1</progress>
-</p>
-
+<body>
+    <section>
+      <p>
+        <label for="photo-input">Choose image for processing</label>
+        <input id="photo-input" name="photo-input" type="file" accept="image/*" />
+      </p>
+      <canvas id="image-input" />
+    </section>
+    <section>
+      <p>
+        <label for="workers-count">Number of webworkers:</label>
+        <input id="workers-count" name="workers-count" type="number" value="1" max="10"/>
+      </p>
+      <button id="postprocessing">Start</button></br>
+      <p>
+        <label for="postprocessing-progress">Progress change image:</label>
+        <progress id="postprocessing-progress" max="100" value="0"></progress>
+      </p>
+      <canvas id="image-output" />
+    </section>
 <script>
-    
-  const worker = new Worker("worker.js", { type: "module" });
-  worker.onmessage = receiveFromWorker;
+  const baseImage = new Image();
+  const postprocessingBtn = document.querySelector('#postprocessing');
+  const postprocessingProgress = document.querySelector('#postprocessing-progress');
+  const workersInput = document.querySelector('#workers-count');
+  const photoInput = document.querySelector('#photo-input');
+  const inputImg = document.querySelector('#image-input');
+  const inputImgCtx = inputImg.getContext('2d');
+  const outputImg = document.querySelector('#image-output');
+  const outputImgCtx = outputImg.getContext('2d');
+  const workers = [];
 
-  const url = document.querySelector("#image-url");
-  const filter = document.querySelector("#filter");
-  const output = document.querySelector("#output");
+  const progressBarObserver = new MutationObserver(() => {
+    if (postprocessingProgress.value === postprocessingProgress.max) {
+      disposeWorkers();
+    }
+  });
+  progressBarObserver.observe(postprocessingProgress, { attributes: true });
 
-  url.oninput = updateImage;
-  filter.oninput = sendToWorker;
-
-  let imageData, context;
-
-  function updateImage() {
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.src = url.value;
-
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      context = canvas.getContext("2d");
-      context.drawImage(img, 0, 0);
-      imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-
-      sendToWorker();
-      output.replaceChildren(canvas);
-    };
+  const disposeWorkers = () => {
+    for (const worker of workers) {
+      worker.terminate();
+    }
+    workers.length = 0;
   }
 
-  function sendToWorker() {
-    worker.postMessage({ imageData, filter: filter.value });
+  const clearOutputCanvas = () => {
+    outputImgCtx.fillStyle = 'black';
+    outputImgCtx.fillRect(0, 0, outputImg.width, outputImg.height);
   }
 
-  function receiveFromWorker(e) {
-    context.putImageData(e.data, 0, 0);
+  const resetProgess = () => {
+    postprocessingProgress.value = 0;
+    postprocessingProgress.max = parseInt(workersInput.value);
   }
+
+  const createWorkerListener = (start) => {
+    return ({ data }) => {
+      outputImgCtx.putImageData(data, 0, start);
+      postprocessingProgress.value = parseInt(postprocessingProgress.value) + 1;
+    }
+  }
+
+  const getWorkersPixelsRanges = (imageHeight) => {
+    const workersCount = parseInt(workersInput.value);
+    const workerPixelsSize = Math.floor(imageHeight / workersCount);
+    const workersPixelsRanges = [];
+    let start = 0;
+    for (let i = 1; i < workersCount; i++) {
+      let end = start + workerPixelsSize;
+      workersPixelsRanges.push([start, end]);
+      start = end;
+    }
+    workersPixelsRanges.push([start, imageHeight]);
+    return workersPixelsRanges;
+  }
+
+  const startPreprocessing = () => {
+    resetProgess();
+    clearOutputCanvas();
+    const pixelRanges = getWorkersPixelsRanges(inputImg.height);
+    for (const [start, end] of pixelRanges) {
+      const imageData = inputImgCtx.getImageData(0, start, inputImg.width, end);
+      const worker = new Worker('worker.js');
+      workers.push(worker);
+      worker.addEventListener('message', createWorkerListener(start));
+      worker.postMessage({ imageData }, [imageData.data.buffer]);
+    }
+  }
+
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files[0];
+    baseImage.src = URL.createObjectURL(file);
+  });
+
+  baseImage.addEventListener('load', () => {
+    inputImg.width = baseImage.width;
+    inputImg.height = baseImage.height;
+    outputImg.width = baseImage.width;
+    outputImg.height = baseImage.height;
+    inputImgCtx.drawImage(baseImage, 0, 0);
+    resetProgess();
+    clearOutputCanvas();
+  });
+
+  postprocessingBtn.addEventListener('click', startPreprocessing);
 </script>
