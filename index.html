@@ -1,110 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-<meta charset="utf-8">
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>HTML 5</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+</head>
 <body>
-    <section>
-      <p>
-        <label for="photo-input">Choose image for processing</label>
-        <input id="photo-input" name="photo-input" type="file" accept="image/*" />
-      </p>
-      <canvas id="image-input" />
-    </section>
-    <section>
-      <p>
-        <label for="workers-count">Number of webworkers:</label>
-        <input id="workers-count" name="workers-count" type="number" value="1" max="10"/>
-      </p>
-      <button id="postprocessing">Start</button></br>
-      <p>
-        <label for="postprocessing-progress">Progress change image:</label>
-        <progress id="postprocessing-progress" max="100" value="0"></progress>
-      </p>
-      <canvas id="image-output" />
-    </section>
-<script>
-  const baseImage = new Image();
-  const postprocessingBtn = document.querySelector('#postprocessing');
-  const postprocessingProgress = document.querySelector('#postprocessing-progress');
-  const workersInput = document.querySelector('#workers-count');
-  const photoInput = document.querySelector('#photo-input');
-  const inputImg = document.querySelector('#image-input');
-  const inputImgCtx = inputImg.getContext('2d');
-  const outputImg = document.querySelector('#image-output');
-  const outputImgCtx = outputImg.getContext('2d');
-  const workers = [];
-
-  const progressBarObserver = new MutationObserver(() => {
-    if (postprocessingProgress.value === postprocessingProgress.max) {
-      disposeWorkers();
-    }
-  });
-  progressBarObserver.observe(postprocessingProgress, { attributes: true });
-
-  const disposeWorkers = () => {
-    for (const worker of workers) {
-      worker.terminate();
-    }
-    workers.length = 0;
-  }
-
-  const clearOutputCanvas = () => {
-    outputImgCtx.fillStyle = 'black';
-    outputImgCtx.fillRect(0, 0, outputImg.width, outputImg.height);
-  }
-
-  const resetProgess = () => {
-    postprocessingProgress.value = 0;
-    postprocessingProgress.max = parseInt(workersInput.value);
-  }
-
-  const createWorkerListener = (start) => {
-    return ({ data }) => {
-      outputImgCtx.putImageData(data, 0, start);
-      postprocessingProgress.value = parseInt(postprocessingProgress.value) + 1;
-    }
-  }
-
-  const getWorkersPixelsRanges = (imageHeight) => {
-    const workersCount = parseInt(workersInput.value);
-    const workerPixelsSize = Math.floor(imageHeight / workersCount);
-    const workersPixelsRanges = [];
-    let start = 0;
-    for (let i = 1; i < workersCount; i++) {
-      let end = start + workerPixelsSize;
-      workersPixelsRanges.push([start, end]);
-      start = end;
-    }
-    workersPixelsRanges.push([start, imageHeight]);
-    return workersPixelsRanges;
-  }
-
-  const startPreprocessing = () => {
-    resetProgess();
-    clearOutputCanvas();
-    const pixelRanges = getWorkersPixelsRanges(inputImg.height);
-    for (const [start, end] of pixelRanges) {
-      const imageData = inputImgCtx.getImageData(0, start, inputImg.width, end);
-      const worker = new Worker('worker.js');
-      workers.push(worker);
-      worker.addEventListener('message', createWorkerListener(start));
-      worker.postMessage({ imageData }, [imageData.data.buffer]);
-    }
-  }
-
-  photoInput.addEventListener('change', () => {
-    const file = photoInput.files[0];
-    baseImage.src = URL.createObjectURL(file);
-  });
-
-  baseImage.addEventListener('load', () => {
-    inputImg.width = baseImage.width;
-    inputImg.height = baseImage.height;
-    outputImg.width = baseImage.width;
-    outputImg.height = baseImage.height;
-    inputImgCtx.drawImage(baseImage, 0, 0);
-    resetProgess();
-    clearOutputCanvas();
-  });
-
-  postprocessingBtn.addEventListener('click', startPreprocessing);
-</script>
+    <kk-image-loader></kk-image-loader>
+        <section>
+            <kk-grayscale-processor></kk-grayscale-processor>
+            <kk-image-column-histogram></kk-image-column-histogram>
+            <kk-noise-processor></kk-noise-processor>
+        </section>
+    <script type="module" src="./index.js"></script>
+</body>
+</html>
